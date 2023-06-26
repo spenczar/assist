@@ -291,9 +291,6 @@ enum ASSIST_STATUS assist_jpl_calc(struct jpl_s *jpl, double jd_ref, double jd_r
 		 double* const out_x, double* const out_y, double* const out_z,
 		 double* const out_vx, double* const out_vy, double* const out_vz,
          double* const out_ax, double* const out_ay, double* const out_az){
-    double t, *z;
-    u_int32_t blk;
-
     if (jpl == NULL || jpl->map == NULL)
         return ASSIST_ERROR_EPHEM_FILE;
     if(body<0 || body >= ASSIST_BODY_NPLANETS)
@@ -308,13 +305,7 @@ enum ASSIST_STATUS assist_jpl_calc(struct jpl_s *jpl, double jd_ref, double jd_r
     // Get mass, position, velocity, and mass of body i in barycentric coords.
     *GM = jpl->mass[body];
 
-    // compute record number and 'offset' into record
-    blk = assist_jpl_record_number(jpl, jd_ref, jd_rel);
-    z = (double*)jpl->map + (blk + 2) * jpl->rec/sizeof(double);
-    t = ((jd_ref - jpl->beg - (double)blk * jpl->inc) + jd_rel) / jpl->inc;
-
     // special case for earth and the moon, since JPL stores the barycenter only.
-
     if (body == ASSIST_BODY_EARTH || body == ASSIST_BODY_MOON) {
       struct mpos_s emb, lun;
       struct jpl_record rec_emb, rec_lun;
@@ -371,7 +362,7 @@ enum ASSIST_STATUS assist_jpl_calc(struct jpl_s *jpl, double jd_ref, double jd_r
       }
       record = assist_jpl_get_record(jpl, jd_ref, jd_rel, col);
 
-      assist_jpl_work(record.data, record.ncm, record.ncf, record.niv, t, jpl->inc, pos.u, pos.v, pos.w);
+      assist_jpl_work(record.data, record.ncm, record.ncf, record.niv, record.t, jpl->inc, pos.u, pos.v, pos.w);
     }
 
     // Convert to au/day and au/day^2
