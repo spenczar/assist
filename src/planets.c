@@ -63,6 +63,42 @@ void assist_jpl_work(double *P, int ncm, int ncf, int niv, double t0, double t1,
                 }
         }
 }
+
+/*
+ *	assist_jpl_position
+ *
+ *	Interpolate the appropriate Chebyshev polynomial coefficients to get position only,
+ *	without velocity or acceleration.
+ */
+void assist_jpl_position(double *P, int ncm, int ncf, int niv, double t0, double t1, double *u)
+{
+  double T[24];
+  double t;
+  int p, m, n, b;
+
+  // adjust to correct interval
+  t = t0 * (double)niv;
+  t0 = 2.0 * fmod(t, 1.0) - 1.0;
+
+  b = (int)t;
+
+  // set up Chebyshev polynomials and derivatives
+  T[0] = 1.0; T[1] = t0;
+
+  for (p = 2; p < ncf; p++) {
+    T[p] = 2.0 * t0 * T[p-1] - T[p-2];
+  }
+
+  // compute the position
+  for (m = 0; m < ncm; m++) {
+    u[m] = 0.0;
+    n = ncf * (m + b * ncm);
+
+    for (p = 0; p < ncf; p++) {
+      u[m] += T[p] * P[n+p];
+    }
+  }
+}
  
 /*
  *  assist_jpl_init
@@ -361,3 +397,35 @@ enum ASSIST_STATUS assist_jpl_calc(struct jpl_s *jpl, double jd_ref, double jd_r
 
 }
 
+enum ASSIST_STATUS assist_helio_to_bary(struct jpl_s *jpl, double jd_ref, double jd_rel,
+					double* const x,  double* const y, double* const z) {
+  /*
+   * Translate from heliocentric to barycentric coordinates.
+   */
+  if (jpl == NULL || jpl->map == NULL) {
+    return ASSIST_ERROR_EPHEM_FILE;
+  }
+
+  double jd = jd_ref + jd_rel;
+  if (jd < jpl->beg || jd > jpl->end) {
+    return ASSIST_ERROR_COVERAGE;
+  }
+
+  struct mpos_s pos;
+  // Get position of sun in barycentric coordinates.
+
+  u_int32_t blk = (u_int32_t)((jd - jpl->beg) / jpl->inc);
+  double *zz = (double*)jpl->map + (blk + 2) * jpl->rec / sizeof(double);
+  double t = (jd - jpl->beg - (double)blk * jpl->inc) / jpl->inc;
+
+  assist_jpl_position(&zz[jpl->off[JPL_SUN]], jpl->ncm[JPL_SUN], jpl->ncf[JPL_SUN], jpl->niv[JPL_SUN], t, jpl->inc, pos.u);
+
+  vecpos_div(pos.u, jpl->cau);
+
+  // Result is translation of input position by sun's position.
+  *x = *x + pos.u[0];
+  *y = *y + pos.u[1];
+  *z = *z + pos.u[2];
+
+  return (ASSIST_SUCCESS);
+}
