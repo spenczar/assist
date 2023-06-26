@@ -11,6 +11,9 @@ enum ASSIST_STATUS assist_jpl_calc(struct jpl_s *pl, double jd_ref, double jd_re
 		 double* const x, double* const y, double* const z,
 		 double* const vx, double* const vy, double* const vz,
          double* const ax, double* const ay, double* const az);
+enum ASSIST_STATUS assist_jpl_calc_position(struct jpl_s *jpl, double jd_ref, double jd_rel, int body, 
+					    double* const GM,
+					    double* const out_x, double* const out_y, double* const out_z);
 u_int32_t assist_jpl_record_number(struct jpl_s *jpl, const double jd_ref, const double jd_rel);
 enum ASSIST_STATUS assist_helio_to_bary(struct jpl_s *jpl, double jd_ref, double jd_rel,
 					double* const x,  double* const y, double* const z);

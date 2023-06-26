@@ -172,6 +172,71 @@ void assist_additional_forces(struct reb_simulation* sim){
     }
 }
 
+int assist_ephem_position(struct assist_ephem* ephem, struct assist_ephem_cache* ephem_cache,
+			  const int i, const double t, double* const GM,
+			  double* const x, double* const y, double* const z
+			  ){
+  if (ephem_cache){
+    double* ct = ephem_cache->t+7*i;
+    for (int s=0; s<7; s+=1){
+      if (t==ct[s]){
+	struct assist_cache_item* items = ephem_cache->items+i*7+s;
+	*GM = items->GM;
+	*x  = items->x;
+	*y  = items->y;
+	*z  = items->z;
+	return ASSIST_SUCCESS;
+      }
+    }
+  }
+  const double jd_ref = ephem->jd_ref;
+
+  // Get position and mass of massive body i.
+  if(i < ASSIST_BODY_NPLANETS){
+    int flag = assist_jpl_calc_position(ephem->jpl, jd_ref, t, i,  GM, x, y, z);
+    if(flag != ASSIST_SUCCESS) return(flag);
+  }else{
+    // Get position and mass of asteroid i-ASSIST_BODY_NPLANETS.
+    int flag = assist_spk_calc(ephem->spl, jd_ref, t, i-ASSIST_BODY_NPLANETS, GM, x, y, z);
+    if(flag != ASSIST_SUCCESS) return(flag);
+
+    // Translate massive asteroids from heliocentric to barycentric.
+    flag = assist_helio_to_bary(ephem->jpl, jd_ref, t, x, y, z);
+    if(flag != ASSIST_SUCCESS) return(flag);
+  }
+    
+  if (ephem_cache){
+    double* ct = ephem_cache->t+7*i;
+    int os = 0;
+    double ot = ct[0];
+    if(ephem_cache->dt_sign>0){
+      // Find oldest (forward integration)
+      for (int s=1; s<7; s+=1){
+	if (ct[s]<ot){
+	  ot = ct[s];
+	  os = s;
+	}
+      }
+    }else{
+      // Find oldest (backward integration)
+      for (int s=1; s<7; s+=1){
+	if (ct[s]>ot){
+	  ot = ct[s];
+	  os = s;
+	}
+      }
+    }
+    // repolace oldest
+    ct[os] = t;
+    struct assist_cache_item* items = ephem_cache->items + i*7 +os;
+    items->GM = *GM;
+    items->x = *x;
+    items->y = *y;
+    items->z = *z;
+  }
+  return(ASSIST_SUCCESS);
+}
+
 int assist_all_ephem(struct assist_ephem* ephem, struct assist_ephem_cache* ephem_cache, const int i, const double t, double* const GM,
 		      double* const x, double* const y, double* const z,
 		      double* const vx, double* const vy, double* const vz,
@@ -266,7 +331,7 @@ static void assist_additional_force_direct(struct reb_simulation* sim, double xo
     struct reb_particle* const particles = sim->particles;
 
     double GM;
-    double x, y, z, vx, vy, vz, ax, ay, az;
+    double x, y, z;
 
     static const int order[ASSIST_BODY_NPLANETS] = { 
         ASSIST_BODY_PLUTO,
@@ -298,8 +363,7 @@ static void assist_additional_force_direct(struct reb_simulation* sim, double xo
         // TOOD: make a version that returns the positions, velocities,
         // and accelerations for all the bodies at a given time.
 
-        int flag = assist_all_ephem(ephem, assist->ephem_cache, i, t, &GM, &x, &y, &z, &vx, &vy, &vz, &ax, &ay, &az);
-
+	int flag = assist_ephem_position(ephem, assist->ephem_pos_cache, i, t, &GM, &x, &y, &z);
         if(flag != ASSIST_SUCCESS){
             reb_error(sim, assist_error_messages[flag]);
         }
@@ -342,10 +406,10 @@ static void assist_additional_force_direct(struct reb_simulation* sim, double xo
         // Note need checks for force flags here. TODO!
 
         // Get position and mass of massive body i.	
-	int flag = assist_all_ephem(ephem, assist->ephem_cache, i, t, &GM, &x, &y, &z, &vx, &vy, &vz, &ax, &ay, &az);
+	int flag = assist_ephem_position(ephem, assist->ephem_pos_cache, i, t, &GM, &x, &y, &z);
 
 	if(flag != ASSIST_SUCCESS){
-        reb_error(sim, assist_error_messages[flag]);
+	  reb_error(sim, assist_error_messages[flag]);
 	}
 
     // Skip remainder of calculation if variational particles are not used
@@ -439,8 +503,8 @@ static void assist_additional_force_earth_J2J4(struct reb_simulation* sim, doubl
     // epoch.
 
     // The geocenter is the reference for the Earth J2/J4 calculations.
-    double xe, ye, ze, vxe, vye, vze, axe, aye, aze;    
-    assist_all_ephem(ephem, assist->ephem_cache, ASSIST_BODY_EARTH, t, &GM, &xe, &ye, &ze, &vxe, &vye, &vze, &axe, &aye, &aze);
+    double xe, ye, ze;    
+    assist_ephem_position(ephem, assist->ephem_pos_cache, ASSIST_BODY_EARTH, t, &GM, &xe, &ye, &ze);
     const double GMearth = GM;
 
     double xr, yr, zr; //, vxr, vyr, vzr, axr, ayr, azr;
@@ -637,9 +701,9 @@ static void assist_additional_force_solar_J2(struct reb_simulation* sim, double 
 
     // The Sun center is reference for these calculations.
 
-    double xr, yr, zr, vxr, vyr, vzr, axr, ayr, azr;
+    double xr, yr, zr;
 
-    assist_all_ephem(ephem, assist->ephem_cache, ASSIST_BODY_SUN, t, &GM, &xr, &yr, &zr, &vxr, &vyr, &vzr, &axr, &ayr, &azr);
+    assist_ephem_position(ephem, assist->ephem_pos_cache, ASSIST_BODY_SUN, t, &GM, &xr, &yr, &zr);
     const double GMsun = GM;    
 
     const double au = ephem->jpl->AU;
@@ -1072,9 +1136,9 @@ static void assist_additional_force_potential_GR(struct reb_simulation* sim,
     double xr, yr, zr;
     
     // The Sun center is reference for these calculations.
-    double xs, ys, zs, vxs, vys, vzs, axs, ays, azs;
+    double xs, ys, zs;
 
-    assist_all_ephem(ephem, assist->ephem_cache, ASSIST_BODY_SUN, t, &GM, &xs, &ys, &zs, &vxs, &vys, &vzs, &axs, &ays, &azs);
+    assist_ephem_position(ephem, assist->ephem_pos_cache, ASSIST_BODY_SUN, t, &GM, &xs, &ys, &zs);
     const double GMsun = GM;
 
     //xs = ys = zs = 0.0;

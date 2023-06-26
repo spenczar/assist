@@ -381,7 +381,84 @@ enum ASSIST_STATUS assist_jpl_calc(struct jpl_s *jpl, double jd_ref, double jd_r
     *out_az = pos.w[2];
 
     return(ASSIST_SUCCESS);
+}
 
+enum ASSIST_STATUS assist_jpl_calc_position(struct jpl_s *jpl, double jd_ref, double jd_rel, int body, 
+					    double* const GM,
+					    double* const out_x, double* const out_y, double* const out_z) {
+    if (jpl == NULL || jpl->map == NULL)
+        return ASSIST_ERROR_EPHEM_FILE;
+    if(body<0 || body >= ASSIST_BODY_NPLANETS)
+	    return(ASSIST_ERROR_NEPHEM);
+    
+    // check if covered by this file
+    if (jd_ref + jd_rel < jpl->beg || jd_ref + jd_rel > jpl->end)
+      return ASSIST_ERROR_COVERAGE;
+    
+    *GM = jpl->mass[body];
+    
+    double pos[3];
+    // special case for earth and the moon, since JPL stores the barycenter only.
+    if (body == ASSIST_BODY_EARTH || body == ASSIST_BODY_MOON) {
+      double emb[3], lun[3];
+      struct jpl_record rec_emb, rec_lun;
+      rec_emb = assist_jpl_get_record(jpl, jd_ref, jd_rel, JPL_EMB);
+      rec_lun = assist_jpl_get_record(jpl, jd_ref, jd_rel, JPL_LUN);
+      assist_jpl_position(rec_emb.data, rec_emb.ncm, rec_emb.ncf, rec_emb.niv, rec_emb.t, jpl->inc, emb);
+      assist_jpl_position(rec_lun.data, rec_lun.ncm, rec_lun.ncf, rec_lun.niv, rec_lun.t, jpl->inc, lun);
+
+      vecpos_set(pos, emb);
+      if (body == ASSIST_BODY_EARTH) {
+	vecpos_off(pos, lun, -1.0 / (1.0 + jpl->cem));
+      } else {
+	vecpos_off(pos, lun, jpl->cem / (1.0 + jpl->cem));
+      }
+    } else {
+      struct jpl_record record;
+      enum JPL_COL col;
+      switch (body) { // The indices in the jpl-> arrays match the JPL component index for the body
+      case ASSIST_BODY_SUN:
+	col = 10;
+	break;
+      case ASSIST_BODY_MERCURY:
+	col = JPL_MER;
+	break;
+      case ASSIST_BODY_VENUS:
+	col = JPL_VEN;
+	break;
+      case ASSIST_BODY_MARS:
+	col = JPL_MAR;
+	break;
+      case ASSIST_BODY_JUPITER:
+	col = JPL_JUP;
+	break;
+      case ASSIST_BODY_SATURN:
+	col = JPL_SAT;
+	break;
+      case ASSIST_BODY_URANUS:
+	col = JPL_URA;
+      	break;
+      case ASSIST_BODY_NEPTUNE:
+	col = JPL_NEP;
+	break;
+      case ASSIST_BODY_PLUTO:
+	col = JPL_PLU;
+	break;
+      default:
+	return ASSIST_ERROR_NEPHEM;
+      }
+      record = assist_jpl_get_record(jpl, jd_ref, jd_rel, col);
+
+      assist_jpl_position(record.data, record.ncm, record.ncf, record.niv, record.t, jpl->inc, pos);
+    }
+
+    // Convert to au/day and au/day^2
+    vecpos_div(pos, jpl->cau);
+    *out_x = pos[0];
+    *out_y = pos[1];
+    *out_z = pos[2];
+
+    return(ASSIST_SUCCESS);
 }
 
 /*

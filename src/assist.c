@@ -270,12 +270,19 @@ void assist_extras_cleanup(struct reb_simulation* sim){
 void assist_init(struct assist_extras* assist, struct reb_simulation* sim, struct assist_ephem* ephem){
     assist->sim = sim;
     assist->ephem_cache = calloc(1, sizeof(struct assist_ephem_cache));
+    assist->ephem_pos_cache = calloc(1, sizeof(struct assist_ephem_cache));
     const int N_total = ASSIST_BODY_NPLANETS + ephem->spl->num;
     assist->gr_eih_sources = 1; // Only include Sun by default
     assist->ephem_cache->items = calloc(N_total*7, sizeof(struct assist_cache_item));
     assist->ephem_cache->t = malloc(N_total*7*sizeof(double));
     for (int i=0;i<7*N_total;i++){
         assist->ephem_cache->t[i] = -1e306;
+    }
+
+    assist->ephem_pos_cache->items = calloc(N_total*7, sizeof(struct assist_cache_item));
+    assist->ephem_pos_cache->t = malloc(N_total*7*sizeof(double));
+    for (int i=0;i<7*N_total;i++){
+        assist->ephem_pos_cache->t[i] = -1e306;
     }
 
     assist->ephem = ephem;
@@ -319,6 +326,16 @@ void assist_free_pointers(struct assist_extras* assist){
         }
         free(assist->ephem_cache);
         assist->ephem_cache = NULL;
+    }
+    if (assist->ephem_pos_cache){
+        if (assist->ephem_pos_cache->items){
+            free(assist->ephem_pos_cache->items);
+        }
+        if (assist->ephem_pos_cache->t){
+            free(assist->ephem_pos_cache->t);
+        }
+        free(assist->ephem_pos_cache);
+        assist->ephem_pos_cache = NULL;
     }
     if (assist->extras_should_free_ephem && assist->ephem){
         assist_ephem_free(assist->ephem);

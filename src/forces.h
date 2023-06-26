@@ -35,4 +35,7 @@ int assist_all_ephem(struct assist_ephem* ephem, struct assist_ephem_cache* cach
 		      double* const ax, double* const ay, double* const az
 		      );
 
+int assist_ephem_position(struct assist_ephem* ephem, struct assist_ephem_cache* ephem_cache,
+			  const int i, const double t, double* const GM,
+			  double* const x, double* const y, double* const z);
 #endif
