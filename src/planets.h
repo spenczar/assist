@@ -11,12 +11,12 @@ enum ASSIST_STATUS assist_jpl_calc(struct jpl_s *pl, double jd_ref, double jd_re
 		 double* const x, double* const y, double* const z,
 		 double* const vx, double* const vy, double* const vz,
          double* const ax, double* const ay, double* const az);
-
+u_int32_t assist_jpl_record_number(struct jpl_s *jpl, const double jd_ref, const double jd_rel);
 enum ASSIST_STATUS assist_helio_to_bary(struct jpl_s *jpl, double jd_ref, double jd_rel,
 					double* const x,  double* const y, double* const z);
 
 // Order of columns in JPL Ephemeris file
-enum {
+enum JPL_COL{
          JPL_MER,                        // Mercury
          JPL_VEN,                        // Venus
          JPL_EMB,                        // Earth
@@ -35,6 +35,16 @@ enum {
 
          JPL_N,                          // Number of columns
  };
+
+struct jpl_record {
+  double *data;  // Pointer to coefficient data
+  int ncm;  // Number of components (usually 3)
+  int ncf;  // Number of coefficients per component
+  int niv;  // Number of intervals/sets of coefficients
+  double t;	// Time
+};
+
+struct jpl_record assist_jpl_get_record(struct jpl_s *jpl, const double jd_ref, const double jd_rel, enum JPL_COL col);
 
 struct jpl_s {
         double beg, end;                // begin and end times
